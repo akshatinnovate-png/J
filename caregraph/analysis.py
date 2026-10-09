@@ -235,6 +235,56 @@ def explain_facts(case: Case, fact_ids: list[str], language: str = "en",
     return evidence.verify_claim(case, claim), result
 
 
+_CLINICIAN = __import__("re").compile(
+    r"(?i)\b(?:dr\.?|doctor|prof\.?)\s+([A-Z][A-Za-z.\-]{1,20}(?:\s+[A-Z][A-Za-z\-]{1,20}){0,2})")
+_ROLE = __import__("re").compile(
+    r"(?i)\b(patholog(?:y|ist)|radiolog(?:y|ist)|cardiolog(?:y|ist)|endocrinolog(?:y|ist)|"
+    r"neurolog(?:y|ist)|physician|surgeon|consultant|gp|general practitioner|nephrolog(?:y|ist))\b")
+
+
+def care_team(case: Case) -> list[dict]:
+    """Clinicians actually named in the uploaded documents.
+
+    This reads names out of the record. It does not invent a care team: if the
+    documents name nobody, the rail stays empty.
+    """
+    found: dict[str, dict] = {}
+    for doc in case.documents:
+        for line in doc.text.splitlines():
+            for match in _CLINICIAN.finditer(line):
+                name = match.group(1).strip().rstrip(",.")
+                if len(name) < 2:
+                    continue
+                role_match = _ROLE.search(line)
+                role = role_match.group(0).title() if role_match else None
+                entry = found.setdefault(name, {
+                    "name": f"Dr. {name}", "role": role, "mentions": 0, "docs": set()})
+                entry["mentions"] += 1
+                entry["docs"].add(doc.doc_id)
+                if role and not entry["role"]:
+                    entry["role"] = role
+    team = []
+    for e in found.values():
+        initials = "".join(part[0] for part in e["name"].replace("Dr. ", "").split()[:2]).upper()
+        team.append({"name": e["name"], "role": e["role"] or "Clinician",
+                     "mentions": e["mentions"], "documents": len(e["docs"]),
+                     "initials": initials or "DR"})
+    team.sort(key=lambda t: (-t["documents"], -t["mentions"], t["name"]))
+    return team
+
+
+def facilities(case: Case) -> list[dict]:
+    """Issuing facilities, read from the first line of each document."""
+    found: dict[str, int] = {}
+    for doc in case.documents:
+        head = next((ln.strip() for ln in doc.text.splitlines() if ln.strip()), "")
+        head = head.split("-")[0].strip()
+        if 3 < len(head) < 48:
+            found[head.title()] = found.get(head.title(), 0) + 1
+    return [{"name": k, "documents": v} for k, v in
+            sorted(found.items(), key=lambda kv: -kv[1])]
+
+
 def appointment_brief(case: Case) -> str:
     """A concise, shareable brief. Every line traceable or marked otherwise."""
     lines: list[str] = ["# Appointment preparation brief", ""]

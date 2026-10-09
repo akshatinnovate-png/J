@@ -88,6 +88,24 @@ class Statement(BaseModel):
     provenance: Provenance
 
 
+class ImagingRecord(BaseModel):
+    """An imaging study referenced in a document.
+
+    CAREGRAPH does not receive real DICOM pixel data. When a document names a
+    study, it renders a SIMULATED illustration of that modality so the record has
+    something to show. The illustration is generated, never a real patient image,
+    and is labelled as such everywhere it appears.
+    """
+    fact_id: str
+    modality: str                 # key into imaging.MODALITIES
+    printed_name: str             # exactly as written in the document
+    body_part: str | None = None
+    observed_on: _dt.date | None = None
+    report_text: str | None = None
+    provenance: Provenance
+    is_illustration: bool = True
+
+
 class Claim(BaseModel):
     """A generated explanation. Must point at real fact_ids or be unverified."""
     claim_id: str
@@ -141,19 +159,22 @@ class Case(BaseModel):
     documents: list[Document] = Field(default_factory=list)
     measurements: list[Measurement] = Field(default_factory=list)
     statements: list[Statement] = Field(default_factory=list)
+    imaging: list[ImagingRecord] = Field(default_factory=list)
     claims: list[Claim] = Field(default_factory=list)
     flags: list[Flag] = Field(default_factory=list)
     questions: list[Question] = Field(default_factory=list)
     gaps: list[GapItem] = Field(default_factory=list)
 
     def fact_ids(self) -> set[str]:
-        return {m.fact_id for m in self.measurements} | {s.fact_id for s in self.statements}
+        return ({m.fact_id for m in self.measurements}
+                | {s.fact_id for s in self.statements}
+                | {i.fact_id for i in self.imaging})
 
     def doc(self, doc_id: str) -> Document | None:
         return next((d for d in self.documents if d.doc_id == doc_id), None)
 
     def fact(self, fact_id: str) -> Measurement | Statement | None:
-        for f in (*self.measurements, *self.statements):
+        for f in (*self.measurements, *self.statements, *self.imaging):
             if f.fact_id == fact_id:
                 return f
         return None

@@ -3,7 +3,7 @@ from caregraph.extraction import ingest, pdf_to_text
 
 
 def test_real_pdf_extracts_measurements(lab_pdf_bytes):
-    doc, measurements, statements = ingest("lab.pdf", data=lab_pdf_bytes)
+    doc, measurements, statements, _img = ingest("lab.pdf", data=lab_pdf_bytes)
     assert doc.extraction_error is None, doc.extraction_error
     by = {m.analyte: m for m in measurements}
     assert by["hba1c"].value == 7.2
@@ -13,7 +13,7 @@ def test_real_pdf_extracts_measurements(lab_pdf_bytes):
 
 
 def test_pdf_provenance_records_a_page(lab_pdf_bytes):
-    _, measurements, _ = ingest("lab.pdf", data=lab_pdf_bytes)
+    _, measurements, _, _img = ingest("lab.pdf", data=lab_pdf_bytes)
     assert all(m.provenance.page >= 1 for m in measurements)
     assert all(m.provenance.raw_text.strip() for m in measurements)
 
@@ -26,5 +26,5 @@ def test_pdf_with_no_text_layer_explains_the_failure(make_pdf):
 
 
 def test_truncated_pdf_does_not_crash(lab_pdf_bytes):
-    doc, measurements, _ = ingest("cut.pdf", data=lab_pdf_bytes[: len(lab_pdf_bytes) // 2])
+    doc, measurements, _, _img = ingest("cut.pdf", data=lab_pdf_bytes[: len(lab_pdf_bytes) // 2])
     assert measurements == [] or doc.extraction_error

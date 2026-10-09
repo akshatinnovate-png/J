@@ -9,7 +9,8 @@ from caregraph.schemas import Case, FlagKind, FlagSeverity
 def case_from(*texts: str) -> Case:
     case = Case()
     for i, text in enumerate(texts):
-        doc, m, s = ingest(f"doc{i}.txt", text=text)
+        doc, m, s, img = ingest(f"doc{i}.txt", text=text)
+        case.imaging.extend(img)
         case.documents.append(doc)
         case.measurements.extend(m)
         case.statements.extend(s)

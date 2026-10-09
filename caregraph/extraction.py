@@ -11,7 +11,7 @@ import io
 import re
 
 from . import safety
-from .schemas import Document, Measurement, Provenance, Statement
+from .schemas import Document, ImagingRecord, Measurement, Provenance, Statement
 from .units import analyte_key, canonical_unit, display_for
 
 MAX_BYTES = 10 * 1024 * 1024  # refuse absurd inputs rather than hang the UI
@@ -70,6 +70,19 @@ _STATEMENT_HINTS: list[tuple[re.Pattern[str], str, str | None]] = [
     (re.compile(r"(?i)\b(advised|advise|recommend(ed)?|instruct(ed)?|should|follow[- ]up|review in)\b"), "instruction", None),
     (re.compile(r"(?i)\b(diagnos(is|ed)|impression|history of|known case of|patient reports?|complains? of|denies)\b"), "observation", None),
 ]
+
+
+# Imaging modalities, matched on how they are actually written in reports.
+_IMAGING_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"(?i)\b(chest\s+)?(x[\s-]?ray|radiograph|cxr)\b"), "xray_chest"),
+    (re.compile(r"(?i)\b(mri|magnetic\s+resonance)\b"), "mri_brain"),
+    (re.compile(r"(?i)\b(ct|computed\s+tomography|cat)\s*(scan)?\b"), "ct_abdomen"),
+    (re.compile(r"(?i)\b(ultrasound|usg|sonograph|echocardiogram|echo)\b"), "ultrasound_cardiac"),
+    (re.compile(r"(?i)\b(ecg|ekg|electrocardiogram)\b"), "ecg"),
+]
+_BODY_PART = re.compile(
+    r"(?i)\b(chest|brain|head|abdomen|abdominal|cardiac|heart|pelvis|spine|knee|"
+    r"shoulder|liver|kidney|thorax|neck|lumbar)\b")
 
 
 def _hash(*parts: object) -> str:
@@ -157,10 +170,11 @@ def _parse_range(tail: str) -> tuple[float | None, float | None, str | None]:
         return None, None, None
 
 
-def extract_facts(doc: Document) -> tuple[list[Measurement], list[Statement]]:
-    """Pull measurements and statements out of a document's text."""
+def extract_facts(doc: Document) -> tuple[list[Measurement], list[Statement], list[ImagingRecord]]:
+    """Pull measurements, statements and imaging references out of a document."""
     measurements: list[Measurement] = []
     statements: list[Statement] = []
+    imaging: list[ImagingRecord] = []
     page = 1
     offset = 0
 
@@ -182,6 +196,29 @@ def extract_facts(doc: Document) -> tuple[list[Measurement], list[Statement]]:
         line_date = _parse_date(stripped) or doc.doc_date
         context = _context_for(stripped)
         matched_measurement = False
+
+        # imaging references are recorded alongside whatever else the line holds
+        for pattern, modality in _IMAGING_PATTERNS:
+            m_img = pattern.search(stripped)
+            if not m_img:
+                continue
+            part = _BODY_PART.search(stripped)
+            body_part = part.group(0).lower() if part else None
+            # refine the default body region from the words actually printed
+            if modality == "ct_abdomen" and body_part in ("chest", "thorax"):
+                modality = "xray_chest"
+            if modality == "mri_brain" and body_part in ("knee", "shoulder", "spine", "lumbar"):
+                body_part = body_part
+            imaging.append(ImagingRecord(
+                fact_id=f"i_{_hash(doc.doc_id, line_no, modality)}",
+                modality=modality,
+                printed_name=stripped[:120],
+                body_part=body_part,
+                observed_on=line_date,
+                report_text=stripped,
+                provenance=prov,
+            ))
+            break
 
         # blood pressure is two analytes printed as one token
         bp = _BP_RE.search(stripped)
@@ -240,11 +277,12 @@ def extract_facts(doc: Document) -> tuple[list[Measurement], list[Statement]]:
                 ))
                 break
 
-    return measurements, statements
+    return measurements, statements, imaging
 
 
 def ingest(filename: str, data: bytes | None = None, text: str | None = None,
-           is_synthetic: bool = False) -> tuple[Document, list[Measurement], list[Statement]]:
+           is_synthetic: bool = False
+           ) -> tuple[Document, list[Measurement], list[Statement], list[ImagingRecord]]:
     """Ingest one document from PDF bytes or raw text."""
     doc_id = f"d_{_hash(filename, len(data or b''), (text or '')[:200])}"
     error: str | None = None
@@ -273,7 +311,7 @@ def ingest(filename: str, data: bytes | None = None, text: str | None = None,
     if text.strip():
         doc.doc_type = find_doc_type(text)
         doc.doc_date, doc.date_is_explicit = find_document_date(text)
-        measurements, statements = extract_facts(doc)
+        measurements, statements, imaging = extract_facts(doc)
     else:
-        measurements, statements = [], []
-    return doc, measurements, statements
+        measurements, statements, imaging = [], [], []
+    return doc, measurements, statements, imaging

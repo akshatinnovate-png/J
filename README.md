@@ -13,6 +13,32 @@ actually verify, and what remains uncertain?*
 
 ---
 
+## Two front-ends, one engine
+
+| | `web/` — the live app | `app.py` — the reference build |
+|---|---|---|
+| Stack | HTML/CSS/SVG + ES modules | Streamlit + Plotly |
+| Runs on | any static host (Netlify, Pages) | a Python server |
+| Engine | `web/js/engine.js` | `caregraph/` |
+| Tests | — | 83 pytest tests |
+
+The JavaScript engine is a direct port of the Python package and produces
+identical output on the demo set — 4 documents, 38 facts, 23 claims, 13 flags,
+2 possible conflicts, 0 rejected references, and the same evidence-status split
+(13 supported / 8 partial / 2 conflicting). The Python package stays as the
+tested reference implementation; the web app is what ships.
+
+### Running the web app
+
+```bash
+cd web && python3 -m http.server 8080    # then open http://localhost:8080
+```
+
+Deploying to Netlify: point it at this repo. `netlify.toml` already sets
+`publish = "web"` with no build step. Everything — PDF parsing, extraction,
+verification, scan generation — runs in the browser, so no record ever leaves
+the device.
+
 ## Quick start
 
 ```bash
@@ -48,13 +74,20 @@ normalised away: if a date, unit or value is not printed in the document, it sta
 `None` rather than being inferred. Scanned PDFs are detected and explained, with a
 text-paste fallback.
 
-### 2. Time machine
+### 2. Care flow canvas
+The main view: every record event laid out chronologically as floating cards,
+joined by bezier streams that run document → extracted fact and chain repeated
+measurements forward in time. Busy dates split into sub-columns rather than
+stacking. Imaging events carry a generated thumbnail; series of three or more
+readings render an inline sparkline. Click any card for its source text.
+
+### 3. Time machine
 A faceted timeline of recorded measurements. Each analyte gets its own panel so a
 value of ~7 is not flattened against a value of ~140. Hovering any point shows the
 value **as printed in the source**, whether it was unit-converted, the sampling
 context, and the original line of text.
 
-### 3. Evidence graph — the signature feature
+### 4. Evidence graph — the signature feature
 A layered, interactive graph: `documents → extracted facts → claims & flags → questions`.
 Click any node to isolate it and read the source text behind it.
 
@@ -68,7 +101,7 @@ Anything else is downgraded to *partially supported*, *unverified*, *conflicting
 evidence*, or *insufficient information* — and shown that way, never hidden. Rejected
 references are counted on the dashboard so the verifier's own behaviour is auditable.
 
-### 4. Contradiction radar
+### 5. Contradiction radar
 Six cross-document checks: unit mismatches, same-day value conflicts, incomparable
 sampling contexts, missing reference ranges, missing or unlabelled dates, and
 conflicting medication records. Each finding shows **both source passages side by side**,
@@ -77,12 +110,12 @@ the exact reason, and what a human needs to clarify.
 Findings are separated into *confirmed formatting inconsistency* and *possible factual
 contradiction*. **CAREGRAPH never decides which record is correct.**
 
-### 5. Missing-information map
+### 6. Missing-information map
 Reports what is documented, what is uncertain and what is absent — undated documents,
 results with no reference range, unstated sampling context, analytes measured only once.
 It names the absence; it never fills it in.
 
-### 6. Appointment copilot
+### 7. Appointment copilot
 Plain-language restatements, a prioritised question list anchored to real evidence, a
 summary of unresolved inconsistencies, and a downloadable appointment brief.
 Multiple output languages are selectable.
@@ -159,6 +192,24 @@ pipeline already extracted and verified.
 | `app.py` | Streamlit dashboard. |
 
 ---
+
+## Synthetic imaging
+
+CAREGRAPH never receives DICOM pixel data. When a document *names* a study
+("MRI Brain", "Chest X-ray"), the app renders an illustration of that modality
+so the record has something to show. Five modalities are generated: chest X-ray,
+brain MRI (T2 axial), cardiac ultrasound, abdominal CT and a rhythm-strip ECG.
+
+They are drawn from a density/echogenicity model rather than as clip-art — the
+X-ray composites soft tissue, air, bone and vasculature as attenuation layers;
+the ultrasound modulates a Rayleigh speckle field by tissue echogenicity with
+depth attenuation; the MRI derives gyral folding from a ridge transform of
+smoothed noise. Each study is deterministic in its record id, so the same record
+always renders the same image.
+
+**Every generated image carries a SIMULATED watermark burned into the pixels**,
+not a removable caption, so a study cannot be mistaken for a real one once it
+leaves the interface. They must not be read clinically.
 
 ## Safety and privacy
 

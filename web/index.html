@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CAREGRAPH — medical record intelligence</title>
+<meta name="description" content="Connects multiple medical records into an evidence-linked model of what changed, what conflicts and what is missing.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='13' fill='%232F6BFF'/><circle cx='16' cy='16' r='5' fill='white'/></svg>">
+</head>
+<body>
+<div class="stage"><div class="frame">
+
+  <!-- ── top bar ── -->
+  <header class="topbar">
+    <div class="wordmark">Care<span>graph</span></div>
+
+    <label class="searchpill">
+      <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <circle cx="8" cy="8" r="5.2"/><path d="M12 12l3.5 3.5"/></svg>
+      <input id="search" placeholder="Search records" autocomplete="off">
+    </label>
+
+    <nav class="navpills" id="nav">
+      <button class="pill on" data-view="flow">Care flow</button>
+      <button class="pill" data-view="imaging">Imaging</button>
+      <button class="pill" data-view="contradictions">Contradictions</button>
+      <button class="pill" data-view="evidence">Evidence</button>
+      <button class="pill ghost" data-view="gaps">Gaps</button>
+      <button class="pill ghost" data-view="brief">Brief</button>
+      <button class="pill ghost" data-view="add">Add record</button>
+    </nav>
+
+    <div class="topright">
+      <button class="cbtn" id="btn-upload" title="Upload records">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 12V3M5.5 6.5 9 3l3.5 3.5M3 12v2.5A1.5 1.5 0 0 0 4.5 16h9a1.5 1.5 0 0 0 1.5-1.5V12"/></svg>
+      </button>
+      <button class="cbtn" id="btn-demo" title="Load demo records">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+          <path d="M9 3.5v11M3.5 9h11"/></svg>
+      </button>
+      <button class="cbtn dark" id="btn-reset" title="Clear session">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+          <path d="M14.5 9a5.5 5.5 0 1 1-1.9-4.2M14.5 3v3.2h-3.2"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── body ── -->
+  <div class="body">
+
+    <aside class="rail" id="rail"></aside>
+
+    <main class="main">
+      <!-- care flow canvas -->
+      <section class="panel canvaspanel on" id="view-flow">
+        <div class="canvaswrap" id="scroller">
+          <div class="canvas" id="canvas">
+            <svg id="streams" xmlns="http://www.w3.org/2000/svg"></svg>
+            <div id="nodes"></div>
+          </div>
+          <div class="months" id="months"></div>
+        </div>
+        <div class="minimap" id="minimap">
+          <canvas id="mmcanvas"></canvas>
+          <button class="cbtn sm play" id="btn-fit" title="Fit to view">
+            <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M3 7V3h4M15 7V3h-4M3 11v4h4M15 11v4h-4"/></svg>
+          </button>
+        </div>
+        <div class="tools">
+          <button class="cbtn dark" data-filter="Imaging" title="Imaging only">
+            <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="3" width="13" height="12" rx="2"/><circle cx="9" cy="9" r="3"/></svg>
+          </button>
+          <button class="cbtn dark" data-filter="Labs" title="Labs only">
+            <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M7 2v5L3.5 14A1.5 1.5 0 0 0 5 16h8a1.5 1.5 0 0 0 1.5-2L11 7V2"/><path d="M6 2h6"/></svg>
+          </button>
+          <button class="cbtn dark" data-filter="all" title="Show everything">
+            <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M3 5h12M3 9h12M3 13h8"/></svg>
+          </button>
+        </div>
+        <div class="zoomer">
+          <button class="cbtn sm" id="zoom-out"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4.5 9h9"/></svg></button>
+          <span class="lv" id="zoom-level">100%</span>
+          <button class="cbtn sm" id="zoom-in"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M9 4.5v9M4.5 9h9"/></svg></button>
+        </div>
+        <div class="loader" id="loader"><div class="spin"></div></div>
+      </section>
+
+      <section class="panel" id="view-imaging"></section>
+      <section class="panel" id="view-contradictions"></section>
+      <section class="panel" id="view-evidence"></section>
+      <section class="panel" id="view-gaps"></section>
+      <section class="panel" id="view-brief"></section>
+      <section class="panel" id="view-add"></section>
+    </main>
+
+    <!-- inspector -->
+    <aside class="drawer" id="drawer">
+      <div class="dh">
+        <div class="tt"><div class="kicker" id="dk">Record</div><div class="dt" id="dt">—</div></div>
+        <button class="cbtn sm" id="drawer-close">
+          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 5l8 8M13 5l-8 8"/></svg>
+        </button>
+      </div>
+      <div class="db" id="db"></div>
+    </aside>
+  </div>
+
+</div></div>
+
+<input type="file" id="file" accept=".pdf,.txt,.md" multiple hidden>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

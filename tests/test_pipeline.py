@@ -30,10 +30,11 @@ def test_demo_set_is_not_hardcoded():
         text = path.read_text(encoding="utf-8")
         if "Fasting glucose 154 mg/dL" in text:
             text = text.replace("Fasting glucose 154 mg/dL", "Fasting glucose 131 mg/dL")
-        doc, m, s = ingest(path.name, text=text, is_synthetic=True)
+        doc, m, s, img = ingest(path.name, text=text, is_synthetic=True)
         case.documents.append(doc)
         case.measurements.extend(m)
         case.statements.extend(s)
+        case.imaging.extend(img)
     modified = analyse(case)
 
     assert {f.flag_id for f in modified.flags} != base_flags
@@ -78,7 +79,7 @@ def test_convertible_units_are_plotted_with_the_original_preserved():
 
 def test_measurements_without_a_date_are_excluded_not_guessed():
     case = Case()
-    doc, m, s = ingest("nodate.txt", text="HbA1c: 6.1 %")
+    doc, m, s, _img = ingest("nodate.txt", text="HbA1c: 6.1 %")
     case.documents.append(doc)
     case.measurements.extend(m)
     series = build_series(analyse(case))
@@ -99,7 +100,7 @@ def test_missing_data_is_not_treated_as_zero():
 
 def test_undated_documents_are_not_positioned_on_the_timeline():
     case = Case()
-    doc, m, s = ingest("nodate.txt", text="HbA1c: 6.1 %")
+    doc, m, s, _img = ingest("nodate.txt", text="HbA1c: 6.1 %")
     case.documents.append(doc)
     events = document_events(analyse(case))
     assert events[0]["dated"] is False and events[0]["date"] is None

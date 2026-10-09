@@ -132,6 +132,11 @@ def build_graph(case: Case) -> dict:
                  doc_id=s.provenance.doc_id, fact_type=s.category)
         edges.append({"source": s.provenance.doc_id, "target": s.fact_id, "relation": "contains"})
 
+    for r in case.imaging:
+        add_node(r.fact_id, NODE_FACT, r.printed_name[:60], detail=r.provenance.raw_text,
+                 doc_id=r.provenance.doc_id, fact_type="imaging", modality=r.modality)
+        edges.append({"source": r.provenance.doc_id, "target": r.fact_id, "relation": "contains"})
+
     for c in case.claims:
         add_node(c.claim_id, NODE_CLAIM, c.text[:70], detail=c.text,
                  status=c.status.value, caveat=c.caveat)

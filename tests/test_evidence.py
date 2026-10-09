@@ -14,7 +14,8 @@ Fasting glucose 142 mg/dL [70-99]
 
 def make_case() -> Case:
     case = Case()
-    doc, m, s = ingest("lab.txt", text=TEXT)
+    doc, m, s, img = ingest("lab.txt", text=TEXT)
+    case.imaging.extend(img)
     case.documents.append(doc)
     case.measurements.extend(m)
     case.statements.extend(s)

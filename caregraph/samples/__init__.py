@@ -24,10 +24,11 @@ def load_sample_case():
 
     case = Case()
     for path in sample_files():
-        doc, measurements, statements = ingest(
+        doc, measurements, statements, imaging = ingest(
             path.name, text=path.read_text(encoding="utf-8"), is_synthetic=True
         )
         case.documents.append(doc)
         case.measurements.extend(measurements)
         case.statements.extend(statements)
+        case.imaging.extend(imaging)
     return analyse(case)

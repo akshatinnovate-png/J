@@ -14,4 +14,7 @@ Triglycerides 180 mg/dL (ref 0-150)
 Creatinine 0.9 mg/dL (ref 0.6-1.3)
 Haemoglobin 13.8 g/dL (ref 13.0-17.0)
 
+Chest X-ray: lung fields clear, no focal consolidation.
+ECG: sinus rhythm, rate 76 bpm, no ST changes.
+
 Reported by Dr. S. Rao, Pathologist.
