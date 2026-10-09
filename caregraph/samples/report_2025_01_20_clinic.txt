@@ -1,0 +1,17 @@
+SUNRISE CLINIC - CONSULTATION NOTE
+*** SIMULATED RECORD - NOT A REAL PATIENT ***
+Visit date: 20 January 2025
+
+Patient reports increased thirst and tiredness over the past two months.
+Blood pressure 138/86 mmHg
+Weight: 84 kg
+BMI 28.4 kg/m2
+
+Point-of-care testing today:
+Fasting glucose 131 mg/dL
+HbA1c: 6.9 %
+
+Metformin 500 mg twice daily
+Atorvastatin 10 mg at night
+Advised to repeat the lipid panel in three months.
+Advised dietary review and 30 minutes of walking daily.

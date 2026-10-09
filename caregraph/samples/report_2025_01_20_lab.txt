@@ -1,0 +1,12 @@
+METRO LABS - LABORATORY REPORT
+*** SIMULATED RECORD - NOT A REAL PATIENT ***
+Collection date: 2025-01-20
+Specimen: Venous blood, fasting
+
+Fasting glucose 154 mg/dL [70-99]
+Total cholesterol 5.3 mmol/L
+LDL cholesterol 3.4 mmol/L
+HDL cholesterol 1.1 mmol/L
+Creatinine 84 umol/L
+
+Note: assay platform changed in December 2024.

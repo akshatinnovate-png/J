@@ -1,0 +1,17 @@
+CITY DIAGNOSTICS - LABORATORY REPORT
+*** SIMULATED RECORD - NOT A REAL PATIENT ***
+Patient: A. Sample      Patient ID: SYN-0001
+Collection date: 12/09/2024
+Specimen: Venous blood, fasting
+
+RESULTS
+HbA1c: 6.4 % (ref 4.0-5.6)
+Fasting glucose 118 mg/dL [70-99]
+Total cholesterol 214 mg/dL (ref 0-200)
+LDL cholesterol 138 mg/dL (ref 0-130)
+HDL cholesterol 42 mg/dL (ref 40-60)
+Triglycerides 180 mg/dL (ref 0-150)
+Creatinine 0.9 mg/dL (ref 0.6-1.3)
+Haemoglobin 13.8 g/dL (ref 13.0-17.0)
+
+Reported by Dr. S. Rao, Pathologist.
