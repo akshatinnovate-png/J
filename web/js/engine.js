@@ -84,7 +84,40 @@ export const DISCLAIMER='CAREGRAPH is an educational and administrative tool. It
 
 /* ───────────────── extraction ───────────────── */
 const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
-const DATE_LABEL=/(report|collection|collected|specimen|visit|consultation|sample|test|issued|date)\b[^\n]{0,30}?(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})/i;
+const DATE_PAT='(\\d{4}-\\d{1,2}-\\d{1,2}|\\d{1,2}[/-]\\d{1,2}[/-]\\d{4}'+
+  '|\\d{1,2}\\s+[A-Za-z]{3,9}\\s+\\d{4}|[A-Za-z]{3,9}\\s+\\d{1,2},?\\s+\\d{4})';
+// Date labels in priority order. A report carries several dates - a date of
+// birth, a collection date, a release date - and picking the wrong one silently
+// mis-positions every fact, so the most specific label wins rather than
+// whichever appears first in the text.
+const DATE_TIERS=[
+  '\\b(collection|collected|specimen|sample|drawn|received)\\b[^\\n]{0,30}?',
+  '\\b(visit|consultation|encounter|admission|performed|study)\\b[^\\n]{0,30}?',
+  '\\b(report|reported|released|issued)\\b[^\\n]{0,30}?',
+  '\\bdate\\b[^\\n]{0,30}?',
+].map(p=>new RegExp(p+DATE_PAT,'gi'));
+// A date of birth is never the document's date.
+const DOB=/\b(date\s+of\s+birth|d\.?\s?o\.?\s?b\.?|birth\s*date|born|dob)\b/i;
+function isDobContext(text,start){
+  const ls=text.lastIndexOf('\n',start)+1;
+  return DOB.test(text.slice(ls,start+40));
+}
+function findDocDate(text){
+  for(const tier of DATE_TIERS){
+    tier.lastIndex=0; let m;
+    while((m=tier.exec(text))){
+      if(isDobContext(text,m.index)) continue;
+      const d=parseDate(m[2]); if(d) return [d,true];
+    }
+  }
+  const head=text.slice(0,600);
+  const any=new RegExp(DATE_PAT,'g'); let m;
+  while((m=any.exec(head))){
+    if(isDobContext(head,m.index)) continue;
+    const d=parseDate(m[0]); if(d) return [d,false];
+  }
+  return [null,false];
+}
 const DOC_TYPES=[['discharge summary','Discharge Summary'],['laboratory report','Laboratory Report'],
   ['lab report','Laboratory Report'],['pathology report','Laboratory Report'],['blood test','Laboratory Report'],
   ['consultation note','Consultation Note'],['clinic note','Consultation Note'],['prescription','Prescription'],
@@ -142,9 +175,8 @@ export function ingest(filename,text,isSynthetic=false){
              docType:null,docDate:null,dateExplicit:false,pageCount:1,extractionError:null};
   const low=text.toLowerCase();
   for(const [n,l] of DOC_TYPES) if(low.includes(n)){doc.docType=l;break;}
-  const lm=text.match(DATE_LABEL);
-  if(lm){const d=parseDate(lm[2]); if(d){doc.docDate=d;doc.dateExplicit=true;}}
-  if(!doc.docDate){const d=parseDate(text.slice(0,600)); if(d)doc.docDate=d;}
+  const [dd,explicit]=findDocDate(text);
+  doc.docDate=dd; doc.dateExplicit=explicit;
 
   const measurements=[],statements=[],imaging=[];
   const lines=text.split('\n');
@@ -451,7 +483,18 @@ export function buildQuestions(c){
 }
 
 /* ───────────────── verifier ───────────────── */
-const numbersIn=t=>new Set((String(t).match(/-?\d+(?:\.\d+)?/g)||[]).map(x=>String(parseFloat(x))));
+// Dates are masked before numbers are read: an ISO date tokenises as 2025, -1,
+// -14, none of which can appear in a source line, which would downgrade every
+// claim that states when something was recorded. A hyphen between two digits is
+// a range separator, not a minus sign, so "4-5.6" is not read as 4 and -5.6.
+const DATE_LIKE=/\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}/g;
+function numbersIn(t){
+  const masked=String(t).replace(DATE_LIKE,' ');
+  const re=/(^|[^\d.A-Za-z])(-?\d+(?:\.\d+)?)/g;
+  const out=new Set(); let m;
+  while((m=re.exec(masked))) out.add(String(parseFloat(m[2])));
+  return out;
+}
 export function factIds(c){
   return new Set([...c.measurements,...c.statements,...c.imaging].map(f=>f.factId));
 }

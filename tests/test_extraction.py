@@ -87,3 +87,23 @@ def test_ingest_requires_data_or_text():
 def test_values_without_known_analyte_are_ignored():
     _, measurements, _, _i = ingest("x.txt", text="Room number 214\nInvoice total 1500 INR")
     assert measurements == []
+
+
+def test_date_of_birth_is_never_the_document_date():
+    """Every real report carries a DOB above the collection date. Picking it
+    would mis-position every fact in the document."""
+    doc, _, _, _i = ingest("lab.txt", text=(
+        "APEX DIAGNOSTICS\nName: R. Mehta\nDate of birth 04/11/1979\n"
+        "Collection date: 14/01/2025\nHbA1c 7.8 % (ref 4.0-5.6)\n"))
+    assert doc.doc_date == _dt.date(2025, 1, 14) and doc.date_is_explicit
+
+
+def test_collection_date_beats_release_date():
+    doc, _, _, _i = ingest("lab.txt", text=(
+        "Report released: 15/01/2025\nCollection date: 14/01/2025\nHbA1c 7.8 %\n"))
+    assert doc.doc_date == _dt.date(2025, 1, 14)
+
+
+def test_document_with_only_a_dob_has_no_date():
+    doc, _, _, _i = ingest("x.txt", text="Name: R. Mehta\nDOB: 04/11/1979\nHbA1c 7.8 %\n")
+    assert doc.doc_date is None

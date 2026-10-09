@@ -106,3 +106,35 @@ def test_integrity_report_counts_rejections():
     report = graph_integrity(case)
     assert report["rejected_references"] == 2  # retained for audit, not silently dropped
     assert report["claims_by_status"].get("unverified", 0) >= 1
+
+
+def test_dates_in_a_claim_do_not_count_as_unsupported_numbers():
+    """An ISO date tokenises as 2025, -1, -14. Reading those as asserted values
+    would downgrade every claim that says when something was recorded."""
+    from caregraph.evidence import _numbers
+    nums = _numbers("Recorded HbA1c decreased from 7.8 to 7.4 % between "
+                    "2025-01-14 and 2025-04-18.")
+    assert nums == {"7.8", "7.4"}
+
+
+def test_range_hyphen_is_not_read_as_a_minus_sign():
+    from caregraph.evidence import _numbers
+    assert _numbers("reference range of 4-5.6") == {"4", "5.6"}
+    assert _numbers("delta was -3.2") == {"-3.2"}
+
+
+def test_trend_claim_over_real_sources_is_supported():
+    case = make_case()
+    case.measurements[0].observed_on = __import__("datetime").date(2025, 1, 14)
+    hba1c = next(m for m in case.measurements if m.analyte == "hba1c")
+    claim = verify_claim(case, Claim(
+        claim_id="t1",
+        text=f"Recorded HbA1c was {hba1c.value:g} % on 2025-03-14.",
+        evidence_ids=[hba1c.fact_id]))
+    assert claim.status is EvidenceStatus.SUPPORTED
+
+
+def test_digits_inside_an_analyte_name_are_not_values():
+    from caregraph.evidence import _numbers
+    assert _numbers("HbA1c was 7.8 %") == {"7.8"}
+    assert _numbers("SpO2 98 %") == {"98"}

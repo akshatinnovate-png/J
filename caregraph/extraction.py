@@ -26,10 +26,23 @@ _DATE_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})\b"), "Mdy"),
 ]
 
-_DATE_LABEL = re.compile(
-    r"(?i)\b(report|collection|collected|specimen|visit|consultation|sample|test|issued|date)\b[^\n]{0,30}?"
-    r"(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})"
-)
+_DATE_PAT = (r"(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4}"
+             r"|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})")
+
+# Date labels in priority order. A report carries several dates - a date of
+# birth, a collection date, a release date - and picking the wrong one silently
+# mis-positions every fact in the document, so the most specific label wins
+# rather than whichever appears first in the text.
+_DATE_TIERS = [
+    r"(?i)\b(collection|collected|specimen|sample|drawn|received)\b[^\n]{0,30}?" + _DATE_PAT,
+    r"(?i)\b(visit|consultation|encounter|admission|performed|study)\b[^\n]{0,30}?" + _DATE_PAT,
+    r"(?i)\b(report|reported|released|issued)\b[^\n]{0,30}?" + _DATE_PAT,
+    r"(?i)\bdate\b[^\n]{0,30}?" + _DATE_PAT,
+]
+_DATE_TIERS = [re.compile(t) for t in _DATE_TIERS]
+
+# A date of birth is never the document's date.
+_DOB = re.compile(r"(?i)\b(date\s+of\s+birth|d\.?\s?o\.?\s?b\.?|birth\s*date|born|dob)\b")
 
 _DOC_TYPES: list[tuple[str, str]] = [
     ("discharge summary", "Discharge Summary"),
@@ -110,15 +123,30 @@ def _parse_date(raw: str) -> _dt.date | None:
     return None
 
 
+def _is_dob_context(text: str, start: int) -> bool:
+    """True when this match sits on a date-of-birth line."""
+    line_start = text.rfind("\n", 0, start) + 1
+    return bool(_DOB.search(text[line_start:start + 40]))
+
+
 def find_document_date(text: str) -> tuple[_dt.date | None, bool]:
-    """Prefer a labelled date ('Collection date: ...'). Returns (date, explicit)."""
-    m = _DATE_LABEL.search(text)
-    if m:
-        d = _parse_date(m[2])
+    """Prefer a specifically labelled date. Returns (date, explicit)."""
+    for tier in _DATE_TIERS:
+        for m in tier.finditer(text):
+            if _is_dob_context(text, m.start()):
+                continue
+            d = _parse_date(m.group(2))
+            if d:
+                return d, True
+    # nothing labelled: fall back to the first date near the top that is not a DOB
+    head = text[:600]
+    for m in re.finditer(_DATE_PAT, head):
+        if _is_dob_context(head, m.start()):
+            continue
+        d = _parse_date(m.group(0))
         if d:
-            return d, True
-    d = _parse_date(text[:600])
-    return (d, False) if d else (None, False)
+            return d, False
+    return None, False
 
 
 def find_doc_type(text: str) -> str | None:

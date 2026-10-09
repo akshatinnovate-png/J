@@ -16,13 +16,31 @@ NODE_CLAIM = "claim"
 NODE_FLAG = "flag"
 NODE_QUESTION = "question"
 
-_NUM_RE = re.compile(r"-?\d+(?:\.\d+)?")
+# The leading group does two jobs: a hyphen between two digits is a range
+# separator rather than a minus sign ("4-5.6" is not 4 and -5.6), and a digit
+# inside a word is part of a name rather than a value (the 1 in HbA1c, the 2
+# in SpO2).
+_NUM_RE = re.compile(r"(^|[^\d.A-Za-z])(-?\d+(?:\.\d+)?)")
+
+# Dates are masked before numbers are read. An ISO date tokenises as 2025, -1,
+# -14, none of which can appear in a source line, which would downgrade every
+# claim that states when something was recorded. Dates in generated claims come
+# from each fact's own provenance-tracked observed_on, not from free text.
+_DATE_LIKE = re.compile(
+    r"\d{4}-\d{1,2}-\d{1,2}"
+    r"|\d{1,2}[/-]\d{1,2}[/-]\d{4}"
+    r"|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}"
+    r"|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}")
 
 
 def _numbers(text: str) -> set[str]:
-    """Numeric tokens in a string, normalised so 7.20 == 7.2."""
+    """Numeric tokens in a string, normalised so 7.20 == 7.2.
+
+    Dates are stripped first and range hyphens are not read as signs.
+    """
+    masked = _DATE_LIKE.sub(" ", str(text))
     out = set()
-    for tok in _NUM_RE.findall(text):
+    for _lead, tok in _NUM_RE.findall(masked):
         try:
             out.add(f"{float(tok):g}")
         except ValueError:
