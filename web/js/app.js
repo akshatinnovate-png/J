@@ -3,6 +3,9 @@ import * as E from './engine.js';
 import * as F from './flow.js';
 import {SAMPLES} from './samples.js';
 import {renderStudy,MODALITIES,SHORT} from './imaging.js';
+import * as CH from './charts.js';
+
+const STORE='caregraph.session.v1';
 
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
@@ -10,7 +13,34 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;',
 const iso=d=>d?new Date(d).toISOString().slice(0,10):'';
 
 const S={ case:E.emptyCase(), view:'flow', cats:F.CATEGORIES.slice(),
-          selected:null, zoom:1, layout:null, query:'' };
+          selected:null, zoom:1, layout:null, query:'', graphFocus:null,
+          graphKinds:['document','fact','claim','flag'] };
+
+/* Records are kept in this browser only. They are stored so a reload does not
+   lose an upload, and the store is cleared with the session. */
+function save(){
+  try{
+    localStorage.setItem(STORE,JSON.stringify(S.case.documents.map(d=>
+      ({name:d.filename,text:d.text,syn:d.isSynthetic}))));
+  }catch(_){ /* private mode or quota: the app still works, just not across reloads */ }
+}
+function restore(){
+  try{
+    const raw=localStorage.getItem(STORE); if(!raw) return false;
+    const docs=JSON.parse(raw); if(!Array.isArray(docs)||!docs.length) return false;
+    let c=E.emptyCase();
+    for(const d of docs) c=E.addDocument(c,d.name,d.text,!!d.syn).case;
+    S.case=c; return true;
+  }catch(_){ return false; }
+}
+function removeDocument(docId){
+  const keep=S.case.documents.filter(d=>d.docId!==docId)
+    .map(d=>({name:d.filename,text:d.text,syn:d.isSynthetic}));
+  let c=E.emptyCase();
+  for(const d of keep) c=E.addDocument(c,d.name,d.text,d.syn).case;
+  S.case=c; S.selected=null; closeDrawer(); refreshAll();
+  toast('Document removed and the case re-analysed');
+}
 
 /* ───────── toast ───────── */
 let toastT;
@@ -79,12 +109,18 @@ function renderFlow(){
   const wrap=$('#scroller');
   let nodes=F.buildNodes(S.case,S.cats).filter(matches);
   const W=wrap.clientWidth/S.zoom, H=wrap.clientHeight/S.zoom;
-  const L=F.layout(nodes,W,H);
-  S.layout=L;
   const cv=$('#canvas');
   cv.style.transform=`scale(${S.zoom})`;
   cv.style.transformOrigin='0 0';
+  // Pass 1 lays out against declared sizes and renders; pass 2 re-lays out against
+  // what the browser actually produced, which is what keeps cards from overlapping.
+  let L=F.layout(nodes,W,H);
   F.render($('#nodes'),$('#streams'),$('#months'),L,S.selected);
+  if(F.measure($('#nodes'),nodes)){
+    L=F.layout(nodes,W,H);
+    F.render($('#nodes'),$('#streams'),$('#months'),L,S.selected);
+  }
+  S.layout=L;
   F.minimap($('#mmcanvas'),L,S.selected);
   $('#zoom-level').textContent=Math.round(S.zoom*100)+'%';
   if(!nodes.length){
@@ -121,7 +157,10 @@ function openDrawer(id){
       ${doc.injection.length?`<div class="dsec"><h4>Safety</h4>
         <div class="card bad"><p>Model-directed text found: ${esc(doc.injection.join(', '))}.
         It was treated as data, not as instructions.</p></div></div>`:''}
-      <div class="dsec"><h4>Source text</h4><div class="src">${esc(doc.text.slice(0,4000))}</div></div>`;
+      <div class="dsec"><h4>Source text</h4><div class="src">${esc(doc.text.slice(0,4000))}</div></div>
+      <div class="dsec"><button class="cbtn" id="rm-doc" data-doc="${esc(doc.docId)}"
+        style="width:100%;border-radius:11px;height:38px;gap:8px;border-color:#FCA5A5;color:#E11D48">
+        <span style="font-size:12.5px;font-weight:560">Remove this document</span></button></div>`;
   }else if(fact){
     const d=c.documents.find(x=>x.docId===fact.prov.docId);
     kicker=fact.kind==='imaging'?'Imaging study':fact.kind==='measurement'?'Measurement':'Statement';
@@ -132,6 +171,16 @@ function openDrawer(id){
       ${fact.kind==='imaging'?`<div class="dsec">
         <canvas id="drawer-scan" width="340" height="300"
           style="width:100%;border-radius:14px;display:block"></canvas>
+        <div style="display:flex;gap:7px;margin-top:9px;align-items:center">
+          <label style="font-size:10.5px;color:#64748B;flex:1">Brightness
+            <input id="v-bri" type="range" min="40" max="190" value="100" style="width:100%"></label>
+          <label style="font-size:10.5px;color:#64748B;flex:1">Contrast
+            <input id="v-con" type="range" min="40" max="260" value="100" style="width:100%"></label>
+          <button class="cbtn sm" id="v-inv" title="Invert">
+            <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="9" cy="9" r="6"/><path d="M9 3v12" fill="currentColor"/></svg></button>
+          <button class="cbtn sm" id="v-reset" title="Reset">
+            <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M14 9A5 5 0 1 1 12.3 5.2M14 3v3.2h-3.2"/></svg></button>
+        </div>
         <div style="margin-top:8px"><span class="badge bad">Simulated illustration</span></div>
         <p style="font-size:12px;color:#8A909E;margin-top:7px;line-height:1.5">
         CAREGRAPH receives no pixel data. This is drawn procedurally so the record has
@@ -152,13 +201,33 @@ function openDrawer(id){
   $('#dt').textContent=titleTxt;
   $('#db').innerHTML=body;
   $('#drawer').classList.add('open');
+  const rm=$('#rm-doc');
+  if(rm) rm.onclick=()=>removeDocument(rm.dataset.doc);
   if(fact&&fact.kind==='imaging'){
     const cv=$('#drawer-scan');
-    if(cv) cv.getContext('2d').drawImage(renderStudy(fact.modality,fact.factId,340,300),0,0);
+    if(cv){
+      cv.getContext('2d').drawImage(renderStudy(fact.modality,fact.factId,340,300),0,0);
+      wireViewer(cv);
+    }
   }
   renderFlow();
 }
 function closeDrawer(){ $('#drawer').classList.remove('open'); S.selected=null; renderFlow(); }
+
+/* Window/level on a generated study. CSS filters re-map the displayed values
+   only; the underlying canvas is untouched. */
+function wireViewer(cv){
+  let inv=false;
+  const apply=()=>{
+    const b=($('#v-bri')?.value||100)/100, c=($('#v-con')?.value||100)/100;
+    cv.style.filter=`brightness(${b}) contrast(${c})${inv?' invert(1)':''}`;
+  };
+  ['v-bri','v-con'].forEach(id=>{const el=$('#'+id); if(el) el.oninput=apply;});
+  const i=$('#v-inv'); if(i) i.onclick=()=>{inv=!inv;apply();};
+  const r=$('#v-reset'); if(r) r.onclick=()=>{
+    inv=false; if($('#v-bri'))$('#v-bri').value=100; if($('#v-con'))$('#v-con').value=100; apply();
+  };
+}
 
 const statusLabel=s=>({supported:'Supported by source',partially_supported:'Partially supported',
   unverified:'Unverified',conflicting_evidence:'Conflicting evidence',
@@ -170,6 +239,57 @@ const badgeFor=s=>({supported:'ok',partially_supported:'warn',conflicting_eviden
 function renderPanels(){
   const c=S.case, i=E.integrity(c);
   const empty=t=>`<div class="empty"><h3>${t}</h3><p>Load records to populate this view.</p></div>`;
+
+  /* timeline */
+  const series=E.buildSeries(c);
+  const plottable=series.filter(s2=>s2.points.length);
+  const held=series.flatMap(s2=>s2.excluded.map(([m,r])=>({s:s2,m,r})));
+  const tw=Math.max(($('#view-timeline').clientWidth||900)-54,520);
+  $('#view-timeline').innerHTML=`
+    <div class="panelhd"><h2>Timeline</h2>
+      <p>Each measurement gets its own panel, so a value near 7 is not flattened
+      against one near 140. Lines join recorded readings only — nothing between
+      two points is inferred.</p></div>
+    ${plottable.length?`<div class="card" style="padding:16px 18px 10px">${CH.timelineSVG(plottable,tw)}</div>
+      <div class="meta" style="margin:9px 2px 16px;font-size:11.5px;color:#64748B">
+        Diamond markers were converted from another unit — hover any point for the
+        value exactly as printed in its source.</div>`
+      :empty('No measurement can be placed on a timeline')}
+    ${held.length?`<h3 style="margin:20px 0 11px;font-size:14px">Held out of the chart</h3>
+      <div class="grid g2">`+held.map(h=>
+        `<div class="card warn"><h3>${esc(h.s.label)} = ${esc(E.fmt(h.m.value))} ${esc(h.m.unit||'(no unit)')}</h3>
+          <p>${esc(h.r)}</p><div class="src" style="margin-top:9px">${esc(h.m.prov.raw)}</div></div>`).join('')+`</div>`:''}`;
+
+  /* evidence graph */
+  const g=CH.buildGraph(c,S.graphKinds);
+  const gw=Math.max(($('#view-graph').clientWidth||900)-54,560);
+  const focusNode=S.graphFocus?g.nodes.find(n=>n.id===S.graphFocus):null;
+  $('#view-graph').innerHTML=`
+    <div class="panelhd"><h2>Evidence graph</h2>
+      <p>Documents feed the facts extracted from them; claims, flags and questions
+      point back at the facts they cite. Click a node to isolate it.</p></div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:13px">
+      ${['document','fact','claim','flag','question'].map(k=>
+        `<button class="pill ${S.graphKinds.includes(k)?'on':''}" data-kind="${k}"
+          style="height:30px;font-size:12px">${k}</button>`).join('')}
+      ${S.graphFocus?`<button class="pill" id="g-clear" style="height:30px;font-size:12px">clear focus</button>`:''}
+    </div>
+    ${g.nodes.length?`<div class="card" style="padding:10px 14px">${CH.graphSVG(g,gw,S.graphFocus)}</div>`
+      :empty('Nothing to graph yet')}
+    ${focusNode?`<div class="card" style="margin-top:13px">
+      <span class="badge ${focusNode.status?badgeFor(focusNode.status):'info'}">${esc(focusNode.kind)}</span>
+      <h3 style="margin-top:9px">${esc(focusNode.label)}</h3>
+      <p>${esc(focusNode.detail||'')}</p>
+      ${focusNode.caveat?`<div class="meta">⚠ ${esc(focusNode.caveat)}</div>`:''}</div>`:''}`;
+  $$('#view-graph .pill[data-kind]').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.kind;
+    S.graphKinds=S.graphKinds.includes(k)?S.graphKinds.filter(x=>x!==k):[...S.graphKinds,k];
+    renderPanels();
+  });
+  const gc=$('#g-clear'); if(gc) gc.onclick=()=>{S.graphFocus=null;renderPanels();};
+  $$('#view-graph .gnode').forEach(n=>n.onclick=()=>{
+    S.graphFocus=S.graphFocus===n.dataset.id?null:n.dataset.id; renderPanels();
+  });
 
   /* imaging */
   $('#view-imaging').innerHTML=`
@@ -453,14 +573,18 @@ function setView(v){
   $$('.panel').forEach(p=>p.classList.toggle('on',p.id==='view-'+v));
   if(v==='flow') renderFlow();
 }
-function refreshAll(){ renderRail(); renderFlow(); renderPanels(); }
+function refreshAll(){ save(); renderRail(); renderFlow(); renderPanels(); }
 
 /* ───────── events ───────── */
 $('#nav').onclick=e=>{ const b=e.target.closest('.pill'); if(b) setView(b.dataset.view); };
 $('#btn-demo').onclick=loadDemo;
 $('#btn-upload').onclick=()=>$('#file').click();
 $('#file').onchange=e=>{ handleFiles([...e.target.files]); e.target.value=''; };
-$('#btn-reset').onclick=()=>{ S.case=E.emptyCase(); S.selected=null; closeDrawer(); refreshAll(); toast('Session cleared'); };
+$('#btn-reset').onclick=()=>{
+  S.case=E.emptyCase(); S.selected=null; S.graphFocus=null;
+  try{localStorage.removeItem(STORE);}catch(_){}
+  closeDrawer(); refreshAll(); toast('Session cleared');
+};
 $('#drawer-close').onclick=closeDrawer;
 
 $('#nodes').onclick=e=>{
@@ -480,8 +604,22 @@ $('#zoom-out').onclick=()=>{ S.zoom=Math.max(0.5,S.zoom-0.15); renderFlow(); };
 $('#btn-fit').onclick=()=>{ S.zoom=1; $('#scroller').scrollTo({left:0,behavior:'smooth'}); renderFlow(); };
 
 let rT; window.addEventListener('resize',()=>{ clearTimeout(rT); rT=setTimeout(renderFlow,160); });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDrawer(); });
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){ closeDrawer(); return; }
+  if(e.target.matches('input,textarea,select')) return;
+  if(S.view!=='flow') return;
+  const ns=(S.layout?.nodes||[]).slice().sort((a,b)=>a.x-b.x||a.y-b.y);
+  if(!ns.length) return;
+  const i=ns.findIndex(n=>n.id===S.selected);
+  if(e.key==='ArrowRight'||e.key==='ArrowLeft'){
+    e.preventDefault();
+    const next=e.key==='ArrowRight'?Math.min(i+1,ns.length-1):Math.max(i-1,0);
+    openDrawer(ns[i<0?0:next].id);
+    document.querySelector(`#nodes [data-id="${CSS.escape(ns[i<0?0:next].id)}"]`)
+      ?.scrollIntoView({block:'center',inline:'center',behavior:'smooth'});
+  }
+});
 
-/* boot */
-refreshAll();
-loadDemo();
+/* boot: a previous session wins over the demo set */
+if(restore()){ refreshAll(); toast('Restored your previous session'); }
+else { refreshAll(); loadDemo(); }

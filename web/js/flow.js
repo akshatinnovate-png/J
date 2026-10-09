@@ -97,18 +97,32 @@ export function layout(nodes,width,height){
   nodes.forEach(n=>{const k=+n.date;(byDate[k]=byDate[k]||[]).push(n);});
   const dates=Object.keys(byDate).map(Number).sort((a,b)=>a-b);
 
-  const padL=92, padR=170, padT=74, padB=118;
-  const MAX_PER_COL=9, SUBCOL=214;
-  const colMin=268;
-  const usable=Math.max(width-padL-padR, dates.length*colMin);
-  const xs={}; let prev=-Infinity;
+  const padL=92, padR=176, padT=74, padB=30;
+  const MAX_PER_COL=9;
+  // Column spacing is derived from the widest card actually present, so a sub-column
+  // can never be narrower than the cards inside it.
+  // Spacing follows measured widths once a render pass has supplied them; a chip
+  // grows to fit its text, so the declared width is an under-estimate.
+  const maxW=Math.max(...nodes.map(n=>n.mw||(SIZE[n.kind]||SIZE.chip)[0]),188);
+  const SUBCOL=maxW+30, STAGGER=10;
+  const markerGap=56;
+  const colMin=maxW+markerGap;
+  // A date with more than MAX_PER_COL events spills into sub-columns, and those
+  // must be reserved before the next date starts - otherwise one busy day's
+  // overflow lands on top of the following column.
+  const subsOf=d=>Math.ceil(byDate[d].length/MAX_PER_COL);
+  const needed=dates.reduce((sum,d)=>sum+colMin+(subsOf(d)-1)*SUBCOL,0);
+  const usable=Math.max(width-padL-padR, needed);
+  const xs={}; let prev=-Infinity, rightmost=padL;
   dates.forEach(d=>{
     let x=padL+((d-t0)/span)*usable;
     if(x-prev<colMin) x=prev+colMin;
-    xs[d]=x; prev=x;
+    xs[d]=x;
+    const spread=(subsOf(d)-1)*SUBCOL;
+    prev=x+spread;                 // next column starts clear of this one's spill
+    rightmost=Math.max(rightmost,x+spread);
   });
-  const widest=Math.max(...dates.map(d=>Math.ceil(byDate[d].length/9)));
-  const contentW=Math.max(width,(xs[dates[dates.length-1]]||padL)+(widest-1)*214+padR);
+  const contentW=Math.max(width,rightmost+padR);
 
   const order={Docs:0,Imaging:1,Visits:2,Labs:3,Medications:4,Findings:5};
   let maxY=0, minY=0;
@@ -121,13 +135,14 @@ export function layout(nodes,width,height){
     cols.forEach((col,ci)=>{
       let up=0, down=0;
       col.forEach((n,i)=>{
-        const [w,h]=SIZE[n.kind]||SIZE.chip;
-        n.w=w; n.h=h;
+        // measured.* is filled by a first render pass; the declared size is only a seed
+        const [dw,dh]=SIZE[n.kind]||SIZE.chip;
+        n.w=n.mw||dw; n.h=n.mh||dh;
         const goUp=i%2===0;
-        if(goUp){ up+=h+16; n.y=mid-up+h/2; }
-        else{ down+=h+16; n.y=mid+down-h/2; }
-        n.x=xs[d]+ci*SUBCOL+((i%3)-1)*11;
-        maxY=Math.max(maxY,n.y+h/2); minY=Math.min(minY,n.y-h/2);
+        if(goUp){ up+=n.h+18; n.y=mid-up+n.h/2; }
+        else{ down+=n.h+18; n.y=mid+down-n.h/2; }
+        n.x=xs[d]+ci*SUBCOL+((i%3)-1)*STAGGER;
+        maxY=Math.max(maxY,n.y+n.h/2); minY=Math.min(minY,n.y-n.h/2);
       });
     });
   });
@@ -250,6 +265,22 @@ export function cardHTML(n,selected){
     <div class="ic" style="background:${n.flagged?'#F2545B':CAT_COLOR[n.cat]}">${icon(n.cat)}</div>
     <div class="tx"><div class="t1">${esc(n.title)}</div><div class="t2">${esc(n.sub)}</div></div>
     <span class="tm">${esc(tm(n.date))}</span></div>`;
+}
+
+/** Read the real rendered size of every card back onto its node.
+ *  Declared sizes are only seeds - a sparkline card is taller than its
+ *  nominal height, and text decides a chip's width - so laying out against
+ *  them is what let cards overlap. */
+export function measure(container,nodes){
+  let changed=false;
+  for(const n of nodes){
+    const el=container.querySelector(`[data-id="${CSS.escape(n.id)}"]`);
+    if(!el) continue;
+    const w=Math.ceil(el.offsetWidth), h=Math.ceil(el.offsetHeight);
+    if(!w||!h) continue;
+    if(n.mw!==w||n.mh!==h){ n.mw=w; n.mh=h; changed=true; }
+  }
+  return changed;
 }
 
 /* ── render into the DOM ── */

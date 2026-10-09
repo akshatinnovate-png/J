@@ -123,7 +123,12 @@ Reports what is documented, what is uncertain and what is absent — undated doc
 results with no reference range, unstated sampling context, analytes measured only once.
 It names the absence; it never fills it in.
 
-### 7. Appointment copilot
+### 7. Imaging viewer
+Any generated study opens with brightness, contrast and invert controls — the
+windowing a radiologist reaches for first. The filters re-map what is displayed;
+the underlying canvas is untouched.
+
+### 8. Appointment copilot
 Plain-language restatements, a prioritised question list anchored to real evidence, a
 summary of unresolved inconsistencies, and a downloadable appointment brief.
 Multiple output languages are selectable.
@@ -200,6 +205,15 @@ pipeline already extracted and verified.
 | `app.py` | Streamlit dashboard. |
 
 ---
+
+## Session handling
+
+Records are held in this browser only. The session is kept in `localStorage` so
+a reload does not lose an upload, and any single document can be removed from
+its inspector — the whole case is then re-analysed, so flags and claims that
+depended on it disappear. Clearing the session wipes the store.
+
+Keyboard: `←` / `→` step through events on the canvas, `Esc` closes the inspector.
 
 ## Synthetic imaging
 

@@ -26,9 +26,11 @@
 
     <nav class="navpills" id="nav">
       <button class="pill on" data-view="flow">Care flow</button>
+      <button class="pill" data-view="timeline">Timeline</button>
+      <button class="pill" data-view="graph">Evidence graph</button>
       <button class="pill" data-view="imaging">Imaging</button>
       <button class="pill" data-view="contradictions">Contradictions</button>
-      <button class="pill" data-view="evidence">Evidence</button>
+      <button class="pill ghost" data-view="evidence">Claims</button>
       <button class="pill ghost" data-view="gaps">Gaps</button>
       <button class="pill ghost" data-view="brief">Brief</button>
       <button class="pill ghost" data-view="add">Add record</button>
@@ -65,6 +67,7 @@
           </div>
           <div class="months" id="months"></div>
         </div>
+        <div class="dock">
         <div class="minimap" id="minimap">
           <canvas id="mmcanvas"></canvas>
           <button class="cbtn sm play" id="btn-fit" title="Fit to view">
@@ -88,9 +91,12 @@
           <span class="lv" id="zoom-level">100%</span>
           <button class="cbtn sm" id="zoom-in"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M9 4.5v9M4.5 9h9"/></svg></button>
         </div>
+        </div>
         <div class="loader" id="loader"><div class="spin"></div></div>
       </section>
 
+      <section class="panel" id="view-timeline"></section>
+      <section class="panel" id="view-graph"></section>
       <section class="panel" id="view-imaging"></section>
       <section class="panel" id="view-contradictions"></section>
       <section class="panel" id="view-evidence"></section>
