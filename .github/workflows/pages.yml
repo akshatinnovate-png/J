@@ -1,0 +1,56 @@
+# Publishes the static app in web/ to GitHub Pages.
+# There is no build step: web/ is served exactly as it sits in the repo.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - claude/eager-maxwell-y9kqyo
+    paths:
+      - 'web/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish rather than cancelling it mid-publish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sanity-check the app is intact
+        run: |
+          test -f web/index.html
+          for f in web/js/app.js web/js/engine.js web/js/flow.js \
+                   web/js/imaging.js web/js/samples.js web/css/app.css; do
+            test -s "$f" || { echo "missing or empty: $f"; exit 1; }
+          done
+          # Pages serves project sites from /<repo>/, so any root-absolute
+          # asset path would 404 there. Fail the build instead of shipping it.
+          if grep -rnE '(href|src)="/[^/]' web/index.html web/js web/css; then
+            echo "root-absolute asset path found — use a relative path"; exit 1
+          fi
+          echo "web/ looks good"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

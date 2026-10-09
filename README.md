@@ -34,10 +34,18 @@ tested reference implementation; the web app is what ships.
 cd web && python3 -m http.server 8080    # then open http://localhost:8080
 ```
 
-Deploying to Netlify: point it at this repo. `netlify.toml` already sets
-`publish = "web"` with no build step. Everything — PDF parsing, extraction,
-verification, scan generation — runs in the browser, so no record ever leaves
-the device.
+Everything — PDF parsing, extraction, verification, scan generation — runs in
+the browser, so no record ever leaves the device. That also means it hosts
+anywhere static.
+
+**GitHub Pages.** `.github/workflows/pages.yml` publishes `web/` on every push.
+One-time setup: repo **Settings → Pages → Build and deployment → Source:
+GitHub Actions**. The site then lands at `https://<user>.github.io/<repo>/`.
+All asset paths are relative, so the project sub-path works; the workflow fails
+the build if a root-absolute path is ever introduced.
+
+**Netlify.** Point it at this repo — `netlify.toml` sets `publish = "web"` with
+no build step.
 
 ## Quick start
 
